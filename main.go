@@ -171,7 +171,7 @@ func main() {
 				conn.Close()
 				break
 			}
-			os.Mkdir(".cache", 0777)
+			os.Mkdir(home+"/.ferment-uploader/cache", 0777)
 			if message.Part == 1 {
 				os.Remove(home + "/.ferment-uploader/cache/" + message.File)
 			}
