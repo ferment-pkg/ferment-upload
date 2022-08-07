@@ -255,6 +255,8 @@ func main() {
 				conn.WriteJSON(Response{Status: 200, Message: "File uploaded to local server successfully, asynchronusly uploading to firebase"})
 				conn.Close()
 				break
+			} else {
+				conn.WriteJSON(Response{Status: 200, Message: fmt.Sprintf("Part %d of %d Uploaded Succesfully", message.Part, message.Of)})
 			}
 
 		}
