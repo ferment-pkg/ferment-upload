@@ -22,11 +22,12 @@ import (
 
 func main() {
 	//start http server
+	home := os.Getenv("HOME")
 	fmt.Println("Starting Logger")
 	os.Mkdir("logs", 0777)
 	//init firebase app
-
-	logFile, err := os.OpenFile("logs/server.logs", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	os.MkdirAll(fmt.Sprintf("%s/.ferment-uploader/logs", home), 0777)
+	logFile, err := os.OpenFile(home+"/.ferment-uploader/logs/server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Println("Failed to open log file")
 		os.Exit(1)
@@ -68,10 +69,11 @@ func main() {
 		Name string `json:"name"`
 		File string `json:"file"`
 	}
-	dir, err := os.ReadDir(".cache")
+	dir, err := os.ReadDir(home + "/.ferment-uploader/cache/")
 	if err != nil {
 		logger.Println("Cache Directory Not Created")
 	}
+
 	var cachedRes []CachedRes
 	for _, file := range dir {
 		if file.Name() == "cached.json" {
@@ -103,7 +105,7 @@ func main() {
 				return
 
 			}
-			bytes, err := os.ReadFile(".cache/" + message.File)
+			bytes, err := os.ReadFile(home + "/.ferment-uploader/cache/" + message.File)
 			if err != nil {
 				logger.Panicf("Failed to read file: %s", err.Error())
 			}
@@ -112,7 +114,7 @@ func main() {
 			if writer.Close() != nil {
 				logger.Panicf("Failed to upload file: %s", err)
 			}
-			os.Remove(".cache/" + message.File)
+			os.Remove(home + "/.ferment-uploader/cache/" + message.File)
 			logger.Printf("Successfully uploaded file: %s ", message.File)
 		}(file)
 	}
@@ -168,9 +170,9 @@ func main() {
 			}
 			os.Mkdir(".cache", 0777)
 			if message.Part == 1 {
-				os.Remove(".cache/" + message.File)
+				os.Remove(home + "/.ferment-uploader/cache/" + message.File)
 			}
-			file, err := os.OpenFile(fmt.Sprintf(".cache/%s", message.File), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			file, err := os.OpenFile(fmt.Sprintf(home+"/.ferment-uploader/cache/%s", message.File), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
 				logger.Println("Failed to open file")
 				conn.WriteJSON(Response{Status: 500, Message: "Failed to open file"})
@@ -187,7 +189,7 @@ func main() {
 			if message.Part == message.Of {
 				go func() {
 					//read file and upload to firebase
-					bytes, err := os.ReadFile(".cache/" + message.File)
+					bytes, err := os.ReadFile(home + "/.ferment-uploader/cache/" + message.File)
 					if err != nil {
 						logger.Panicf("Failed to read file: %s", err.Error())
 					}
@@ -196,9 +198,9 @@ func main() {
 					if writer.Close() != nil {
 						logger.Panicf("Failed to upload file: %s", err)
 					}
-					os.Remove(".cache/" + message.File)
+					os.Remove(home + "/.ferment-uploader/cache/" + message.File)
 					logger.Printf("Successfully uploaded file: %s ", message.File)
-					file, err := os.ReadFile(".cache/cached.json")
+					file, err := os.ReadFile(home + "/.ferment-uploader/cache/cached.json")
 					if err != nil {
 						logger.Panicf("Failed to read cached.json: %s", err.Error())
 					}
@@ -216,20 +218,20 @@ func main() {
 					if err != nil {
 						logger.Panicf("Failed to marshal cachedRes: %s", err)
 					}
-					err = ioutil.WriteFile(".cache/cached.json", out, 0644)
+					err = ioutil.WriteFile(home+"/.ferment-uploader/cache/cached.json", out, 0644)
 					if err != nil {
 						logger.Panicf("Failed to write cached.json: %s", err.Error())
 					}
 					logger.Println("Removed from cached.json")
 
 				}()
-				file, err := os.ReadFile(".cache/cached.json")
+				file, err := os.ReadFile(home + "/.ferment-uploader/cache/cached.json")
 				if err != nil {
-					_, err := os.Create(".cache/cached.json")
+					_, err := os.Create(home + "/.ferment-uploader/cache/cached.json")
 					if err != nil {
 						logger.Panicf("Failed to create cached.json: %s", err.Error())
 					}
-					file, err = os.ReadFile(".cache/cached.json")
+					file, err = os.ReadFile(home + "/.ferment-uploader/cache/cached.json")
 					if err != nil {
 						logger.Panicf("Failed to read cached.json: %s", err.Error())
 
@@ -243,7 +245,7 @@ func main() {
 				if err != nil {
 					logger.Panicf("Failed to marshal cached.json: %s", err.Error())
 				}
-				err = ioutil.WriteFile(".cache/cached.json", out, 0644)
+				err = ioutil.WriteFile(home+"/.ferment-uploader/cache/cached.json", out, 0644)
 				if err != nil {
 					logger.Panicf("Failed to write cached.json: %s", err.Error())
 				}
