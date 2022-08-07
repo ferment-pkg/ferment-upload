@@ -392,10 +392,6 @@ func ghPayload(logger *log.Logger) func(w http.ResponseWriter, r *http.Request) 
 func verifySignature(body []byte, secret string, sha string, logger *log.Logger) bool {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write(body)
-	expectedMAC := h.Sum(nil)
-	actualMAC, err := hex.DecodeString(sha)
-	if err != nil {
-		logger.Panicf("Failed to decode hex: %s", err)
-	}
-	return hmac.Equal(actualMAC, expectedMAC)
+	hmacString := hex.EncodeToString(h.Sum(nil))
+	return hmacString == sha
 }
