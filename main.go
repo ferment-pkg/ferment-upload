@@ -126,7 +126,7 @@ func main() {
 		logger.Println("Received request")
 		upgrader := websocket.Upgrader{
 			EnableCompression: true,
-			ReadBufferSize:    1024 * 1024 * 10,
+			ReadBufferSize:    1024 * 1024 * 50,
 		}
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -155,7 +155,7 @@ func main() {
 			}
 			//check if p is larger than 10mb
 			logger.Println(len(p) / 1024 / 1024)
-			if len(p) > 1024*1024*11 {
+			if len(p) > 1024*1024*50 {
 				conn.WriteJSON(Response{Status: 500, Message: "Message too large, max 10mb"})
 				return
 			}
