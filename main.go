@@ -2,15 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -218,7 +221,7 @@ func main() {
 					if err != nil {
 						logger.Panicf("Failed to marshal cachedRes: %s", err)
 					}
-					err = ioutil.WriteFile(home+"/.ferment-uploader/cache/cached.json", out, 0644)
+					err = os.WriteFile(home+"/.ferment-uploader/cache/cached.json", out, 0644)
 					if err != nil {
 						logger.Panicf("Failed to write cached.json: %s", err.Error())
 					}
@@ -245,7 +248,7 @@ func main() {
 				if err != nil {
 					logger.Panicf("Failed to marshal cached.json: %s", err.Error())
 				}
-				err = ioutil.WriteFile(home+"/.ferment-uploader/cache/cached.json", out, 0644)
+				err = os.WriteFile(home+"/.ferment-uploader/cache/cached.json", out, 0644)
 				if err != nil {
 					logger.Panicf("Failed to write cached.json: %s", err.Error())
 				}
@@ -256,7 +259,8 @@ func main() {
 
 		}
 	})
-
+	payload := ghPayload(logger)
+	http.HandleFunc("/ghpayload", payload)
 	//keep code running
 	logger.Println("Listening on port " + os.Getenv("PORT"))
 	http.ListenAndServe(":"+(os.Getenv("PORT")), nil)
@@ -265,7 +269,8 @@ func main() {
 func reader(logger *log.Logger) {
 	file, err := os.Open(".env")
 	if err != nil {
-		logger.Panicf("Failed to open .env file: %s", err)
+		logger.Println(".env file not found assuming env already set")
+		return
 	}
 	defer file.Close()
 	//store file content in a byte array
@@ -290,11 +295,105 @@ func reader(logger *log.Logger) {
 	lines := strings.Split(string(content), "\n")
 	for _, line := range lines {
 		//split line by =
-		parts := strings.Split(line, "=")
+		str := strings.Replace(line, "=", " ", 1)
+		parts := strings.Split(str, " ")
 		if len(parts) == 2 {
 			//make sure to remve speech marks
 			os.Setenv(parts[0], strings.Replace(parts[1], "\"", "", -1))
 			//set environment variable
 		}
 	}
+}
+func ghPayload(logger *log.Logger) func(w http.ResponseWriter, r *http.Request) {
+	type Response struct {
+		Status  int    `json:"status"`
+		Message string `json:"message"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "POST":
+			break
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.Write([]byte("Cannot " + r.Method + " to this endpoint"))
+			return
+
+		}
+		secret := os.Getenv("GH_SECRET")
+		if secret == "" {
+			logger.Panicf("GH_SECRET not set")
+		}
+		if r.Header.Get("X-Hub-Signature-256") == "" {
+			res, err := json.Marshal(Response{Status: 400, Message: "X-Hub-Signature-256 not set"})
+			if err != nil {
+				logger.Panicf("Failed to marshal response: %s", err)
+				w.Write([]byte("Failed to marshal response"))
+				w.WriteHeader(500)
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(res)
+			return
+		}
+		switch r.Header.Get("X-Github-Event") {
+		case "push":
+			break
+		case "ping":
+			w.Write([]byte("pong"))
+			return
+		default:
+			res, err := json.Marshal(Response{Status: 400, Message: "X-Github-Event not set"})
+			if err != nil {
+				logger.Panicf("Failed to marshal response: %s", err)
+				w.Write([]byte("Failed to marshal response"))
+				w.WriteHeader(500)
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(res)
+			return
+		}
+		rawBody := r.Body
+		defer rawBody.Close()
+		body, err := io.ReadAll(rawBody)
+		if err != nil {
+			logger.Panicf("Failed to read body: %s", err)
+			w.Write([]byte("Failed to read body"))
+			w.WriteHeader(500)
+			return
+		}
+		//verify signature
+		sig := r.Header.Get("X-Hub-Signature-256")
+		if !verifySignature(body, secret, sig, logger) {
+			res, err := json.Marshal(Response{Status: 400, Message: "Signature verification failed"})
+			if err != nil {
+				logger.Panicf("Failed to marshal response: %s", err)
+				w.Write([]byte("Failed to marshal response"))
+				w.WriteHeader(500)
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(res)
+			return
+		}
+		//run git pull through shell
+		cmd := exec.Command("git", "pull")
+		err = cmd.Run()
+		if err != nil {
+			logger.Panicf("Failed to run git pull: %s", err)
+			w.Write([]byte("Failed to run git pull"))
+			w.WriteHeader(500)
+			return
+		}
+		w.Write([]byte("OK"))
+
+	}
+
+}
+func verifySignature(body []byte, secret string, sha string, logger *log.Logger) bool {
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write(body)
+	expectedMAC := h.Sum(nil)
+	actualMAC, err := hex.DecodeString(sha)
+	if err != nil {
+		logger.Panicf("Failed to decode hex: %s", err)
+	}
+	return hmac.Equal(actualMAC, expectedMAC)
 }
