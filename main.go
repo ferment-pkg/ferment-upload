@@ -383,6 +383,7 @@ func ghPayload(logger *log.Logger) func(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		w.Write([]byte("OK"))
+		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 
 	}
 
