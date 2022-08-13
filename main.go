@@ -379,7 +379,7 @@ func ghPayload(logger *log.Logger) func(w http.ResponseWriter, r *http.Request) 
 		}
 		//verify signature
 		sig := r.Header.Get("X-Hub-Signature-256")
-		if !verifySignature(body, secret, sig, logger) {
+		if !verifySignature(body, secret, strings.Replace(sig, "sha256=", "", -1), logger) {
 			res, err := json.Marshal(Response{Status: 400, Message: "Signature verification failed"})
 			if err != nil {
 				logger.Panicf("Failed to marshal response: %s", err)
