@@ -123,14 +123,34 @@ func main() {
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		type Response struct {
+			Status  int    `json:"status"`
+			Message string `json:"message"`
+		}
 		logger.Println("Received request")
 		upgrader := websocket.Upgrader{
 			EnableCompression: true,
 			ReadBufferSize:    1024 * 1024 * 50,
+			Error: func(w http.ResponseWriter, r *http.Request, status int, reason error) {
+				w.Header().Set("Content-Type", "application/json")
+				response, _ := json.Marshal(Response{
+					Status:  400,
+					Message: reason.Error(),
+				})
+				w.WriteHeader(status)
+
+				w.Write(response)
+			},
 		}
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			logger.Panicln("Failed to upgrade connection")
+			logger.Println("Failed to upgrade connection")
+			// response, _ := json.Marshal(Response{
+			// 	Status:  400,
+			// 	Message: "Failed to upgrade connection",
+			// })
+			// w.Write(response)
+			return
 		}
 		type Message struct {
 			File string `json:"file"`
@@ -138,10 +158,6 @@ func main() {
 			Of   int    `json:"of"`
 			Data string `json:"data"`
 			Name string `json:"name"`
-		}
-		type Response struct {
-			Status  int    `json:"status"`
-			Message string `json:"message"`
 		}
 
 		conn.SetCompressionLevel(9)
@@ -252,7 +268,7 @@ func main() {
 				if err != nil {
 					logger.Panicf("Failed to write cached.json: %s", err.Error())
 				}
-				conn.WriteJSON(Response{Status: 200, Message: "File uploaded to local server successfully, asynchronusly uploading to firebase"})
+				conn.WriteJSON(Response{Status: 200, Message: "File Uploaded to local server successfully, asynchronusly uploading to firebase"})
 				break
 			} else {
 				conn.WriteJSON(Response{Status: 200, Message: fmt.Sprintf("Part %d of %d Uploaded Succesfully", message.Part, message.Of)})
